@@ -521,6 +521,33 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
             counter_prefix_cache_hits, engine_indexes, model_name
         )
 
+        # Requests resuming after a preemption are kept out of the two counters above (see
+        # PrefixCacheStats.record), so how much of their KV survived in the prefix cache -- versus
+        # having to be recomputed -- was invisible. Export it separately.
+        counter_prefix_cache_preempted_queries = self._counter_cls(
+            name="vllm:prefix_cache_preempted_queries",
+            documentation=(
+                "Prefix cache queries by requests resuming after preemption, "
+                "in terms of number of queried tokens."
+            ),
+            labelnames=labelnames,
+        )
+        self.counter_prefix_cache_preempted_queries = make_per_engine(
+            counter_prefix_cache_preempted_queries, engine_indexes, model_name
+        )
+
+        counter_prefix_cache_preempted_hits = self._counter_cls(
+            name="vllm:prefix_cache_preempted_hits",
+            documentation=(
+                "Prefix cache hits by requests resuming after preemption, "
+                "in terms of number of cached tokens."
+            ),
+            labelnames=labelnames,
+        )
+        self.counter_prefix_cache_preempted_hits = make_per_engine(
+            counter_prefix_cache_preempted_hits, engine_indexes, model_name
+        )
+
         #
         # External - KV connector prefix cache
         #
@@ -1049,6 +1076,12 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
             )
             self.counter_prefix_cache_hits[engine_idx].inc(
                 scheduler_stats.prefix_cache_stats.hits
+            )
+            self.counter_prefix_cache_preempted_queries[engine_idx].inc(
+                scheduler_stats.prefix_cache_stats.preempted_queries
+            )
+            self.counter_prefix_cache_preempted_hits[engine_idx].inc(
+                scheduler_stats.prefix_cache_stats.preempted_hits
             )
 
             if scheduler_stats.connector_prefix_cache_stats is not None:
